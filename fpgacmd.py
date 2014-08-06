@@ -1,11 +1,27 @@
-import pycommon.bits as bits
+#   FPGA Serial Command Library
+#
+#   Description: A library containing functions for sending serial commands to FPGA.
+#
+#   Notes: None.
+#   
+#   Revision History:
+#       Steven Okai     08/01/14    1) Initial revision.
+#       Steven Okai     08/05/14    1) Added read(), write().
+# 
 
-SEQ_BIT_MASK = 0x80
-WRITE_BIT_MASK = 0x40
+import pycommon.bits as bits
+import serial
+
+SEQ_BIT_MASK = 0x80;
+WRITE_BIT_MASK = 0x40;
+CMD_TIMEOUT = 10;
+
+# TODO: make this a class...object will contain port and nothing else?
 
 def extract_reply(reply_data):
     # Make sure all bytes are present.
-    assert len(reply_data) == 7;
+    if (len(reply_data) != 7):
+        raise IOError("Incomplete reply data.");
 
     # Extract to a list of bytes.
     data_bytes = list(bytearray(reply_data));
@@ -14,7 +30,8 @@ def extract_reply(reply_data):
 
     # Check reply sequence.
     for i in xrange(7):
-        assert ((SEQ_BIT_MASK & data_bytes[i]) != current_seq_byte);
+        if ((SEQ_BIT_MASK & data_bytes[i]) == current_seq_byte):
+            raise IOError("Packet sequence error.");
         current_seq_byte = SEQ_BIT_MASK & data_bytes[i];
 
     # Extract data (payload) bits.
@@ -25,15 +42,6 @@ def extract_reply(reply_data):
     data = data + bits.slice_int(data_bytes[6], 6, 0);
 
     return data;
-#   FPGA Serial Command Library
-#
-#   Description: A library containing functions for sending serial commands to FPGA.
-#
-#   Notes: None.
-#   
-#   Revision History:
-#       Steven Okai     08/01/14    1) Initial revision.
-# 
 
 def pack_command(address, write, data):
     command_bytes = [];
@@ -61,5 +69,31 @@ def pack_command(address, write, data):
 def pack_write(address, data):
     return pack_command(address, True, data);
 
-def pack_read(address, data):
-    return pack_command(address, False, data);
+def pack_read(address):
+    return pack_command(address, False, 0);
+
+def write(address, data, port):
+    port.write(pack_write(address, data));
+
+    timeout_count = 0;
+    # Wait until all bytes of ack received.
+    while (port.inWaiting() < 7):
+        timeout_count += 1;
+        if  (timeout_count >= CMD_TIMEOUT):
+            raise IOError("Write timed out.");
+
+    # Just read out reply, error checking is built in, so data can be thrown away.
+    extract_reply(port.read(7));   # TODO: should i read out all data to make sure buffer is clear??? Probably...
+
+def read(address, data, port):
+    port.write(pack_read(address));
+    
+    timeout_count = 0;
+    # Wait until all bytes of ack received.
+    while (port.inWaiting() < 7):
+        timeout_count += 1;
+        if  (timeout_count >= CMD_TIMEOUT):
+            raise IOError("Read timed out.");
+
+    # Just read out reply, error checking is built in, so data can be thrown away.
+    return extract_reply(port.read(7));   # TODO: should i read out all data to make sure buffer is clear??? Probably...
