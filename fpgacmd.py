@@ -7,6 +7,8 @@
 #   Revision History:
 #       Steven Okai     08/01/14    1) Initial revision.
 #       Steven Okai     08/05/14    1) Added read(), write().
+#       Steven Okai     08/23/14    1) Fixed arguments for read().
+#                                   2) Added write_verify().
 # 
 
 import pycommon.bits as bits
@@ -85,7 +87,7 @@ def write(address, data, port):
     # Just read out reply, error checking is built in, so data can be thrown away.
     extract_reply(port.read(7));   # TODO: should i read out all data to make sure buffer is clear??? Probably...
 
-def read(address, data, port):
+def read(address, port):
     port.write(pack_read(address));
     
     timeout_count = 0;
@@ -97,3 +99,9 @@ def read(address, data, port):
 
     # Just read out reply, error checking is built in, so data can be thrown away.
     return extract_reply(port.read(7));   # TODO: should i read out all data to make sure buffer is clear??? Probably...
+
+def write_verify(address, data, port):
+    write(address, data, port);
+    try:
+        if(read(address, port) != data):
+            raise IOError("Read data does not match write data.");
